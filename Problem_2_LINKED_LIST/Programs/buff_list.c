@@ -15,38 +15,58 @@ void* my_memcpy(void* dest, const void* src, unsigned int len) {
     return dest;
 }
 
+
 struct fixed_buff* build_fixed_buff_list(struct stream *s) {
     if (!s) {
         fprintf(stderr, "[ERROR] Null stream passed to build_fixed_buff_list\n");
         return NULL;
     }
 
-    struct fixed_buff *head = NULL, *tail = NULL;
+    uint8_t *all_data = NULL;
+    unsigned int total_len = 0;
     uint8_t *curr_data;
     unsigned int curr_len;
 
+    // Accumulate entire stream
     while ((curr_data = stream_get(s, &curr_len)) != NULL) {
-        unsigned int offset = 0;
-        while (offset < curr_len) {
-            unsigned int chunk_size = (curr_len - offset >= FIXED_BUFF_LEN) ? FIXED_BUFF_LEN : (curr_len - offset);
-            struct fixed_buff *node = fixed_buff_alloc();
-            if (!node) {
-                fprintf(stderr, "[ERROR] Memory allocation failed for fixed_buff node\n");
-                return head;
-            }
-            my_memcpy(node->data, curr_data + offset, chunk_size);
-            node->data_len = chunk_size;
-            node->next = NULL;
-
-            if (!head)
-                head = tail = node;
-            else {
-                tail->next = node;
-                tail = node;
-            }
-            offset += chunk_size;
+        uint8_t *new_buf = realloc(all_data, total_len + curr_len);
+        if (!new_buf) {
+            fprintf(stderr, "[ERROR] Memory reallocation failed.\n");
+            free(all_data);
+            return NULL;
         }
+        all_data = new_buf;
+        my_memcpy(all_data + total_len, curr_data, curr_len);
+        total_len += curr_len;
     }
 
+    // Chunk the entire buffer into 32-byte fixed_buff nodes
+    struct fixed_buff *head = NULL, *tail = NULL;
+    unsigned int offset = 0;
+
+    while (offset < total_len) {
+        unsigned int chunk_size = (total_len - offset >= FIXED_BUFF_LEN) ? FIXED_BUFF_LEN : (total_len - offset);
+        struct fixed_buff *node = fixed_buff_alloc();
+        if (!node) {
+            fprintf(stderr, "[ERROR] Failed to allocate fixed_buff node.\n");
+            break;
+        }
+
+        my_memcpy(node->data, all_data + offset, chunk_size);
+        node->data_len = chunk_size;
+        node->next = NULL;
+
+        if (!head)
+            head = tail = node;
+        else {
+            tail->next = node;
+            tail = node;
+        }
+
+        offset += chunk_size;
+    }
+
+    free(all_data);
     return head;
 }
+
