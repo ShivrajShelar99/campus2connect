@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <string.h>
 #include "fixed_buff_list.h"
+
 #define FIXED_BUFF_LEN 32
 
 uint8_t* stream_get(struct stream *s, unsigned int *data_len) {
@@ -41,7 +42,6 @@ void print_list(struct fixed_buff *head, FILE *logfile) {
     }
 }
 
-
 void free_list(struct fixed_buff *head) {
     while (head) {
         struct fixed_buff *temp = head;
@@ -50,32 +50,41 @@ void free_list(struct fixed_buff *head) {
     }
 }
 
-int main() {
+int main(int argc, char *argv[]) {
     FILE *log = fopen("output.txt", "w");
     if (!log) {
         printf("Log file creation failed.\n");
         return 1;
     }
 
-    unsigned int total_size;
-    printf("Enter stream size in bytes: ");
-    scanf("%u", &total_size);
+    if (argc != 2) {
+        fprintf(stderr, "Usage: %s <input_file>\n", argv[0]);
+        return 1;
+    }
 
-    struct stream s;
-    s.call_count = 0;
-    s.offset = 0;
+    FILE *f = fopen(argv[1], "rb");
+    if (!f) {
+        fprintf(stderr, "Failed to open input file.\n");
+        return 1;
+    }
+
+    fseek(f, 0, SEEK_END);
+    unsigned int total_size = ftell(f);
+    rewind(f);
+
+    struct stream s = {0};
     s.size = total_size;
+    s.offset = 0;
     s.buffer = malloc(total_size);
-
     if (!s.buffer) {
         fprintf(log, "Failed to allocate stream buffer.\n");
+        fclose(f);
         fclose(log);
         return 1;
     }
 
-    for (unsigned int i = 0; i < total_size; i++) {
-        s.buffer[i] = (uint8_t)((i % 255) + 1);
-    }
+    fread(s.buffer, 1, total_size, f);
+    fclose(f);
 
     fprintf(log, "Stream Size: %u bytes\n", total_size);
 
@@ -96,7 +105,5 @@ int main() {
 
     fprintf(log, "Test completed.\n");
     fclose(log);
-    
     return 0;
 }
-
